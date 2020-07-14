@@ -3,6 +3,8 @@ package coapctrl
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-ocf/go-coap/v2/message"
@@ -12,15 +14,21 @@ import (
 	"go.uber.org/zap"
 )
 
+var qr string
+
 type CoAPController struct {
-	logger *zap.Logger
-	store  *postgres.PantryStore
+	logger   *zap.Logger
+	store    *postgres.PantryStore
+	merchant *postgres.MerchantStore
+	customer *postgres.CustomerStore
 }
 
-func NewController(logger *zap.Logger, store *postgres.PantryStore) *CoAPController {
+func NewController(logger *zap.Logger, store *postgres.PantryStore, merchant *postgres.MerchantStore, customer *postgres.CustomerStore) *CoAPController {
 	return &CoAPController{
-		logger: logger,
-		store:  store,
+		logger:   logger,
+		store:    store,
+		merchant: merchant,
+		customer: customer,
 	}
 }
 
@@ -72,14 +80,67 @@ func (c *CoAPController) HandleB(w mux.ResponseWriter, r *mux.Message) {
 }
 
 func (c *CoAPController) HandleC(w mux.ResponseWriter, r *mux.Message) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+
+	path, err := r.Options.Path()
+	QR := strings.TrimPrefix(path, "unlock/")
+	c.logger.Info("Trimmed: ", zap.Any("Path", QR))
+	qrstring := postgres.getString(QR)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	list, err := c.store.ListPantries(ctx)
+	listPantry, err := c.store.ListPantries(ctx)
 	if err != nil {
 		c.logger.Error("Cannot list pantries", zap.Error(err))
 	}
 
+	listMerchant, err := c.merchant.ListMerchants(ctx)
+	if err != nil {
+		c.logger.Error("Cannot list merchants", zap.Error(err))
+	}
+
+	listCustomer, err := c.customer.ListCustomers(ctx)
+	if err != nil {
+		c.logger.Error("Cannot list merchants", zap.Error(err))
+	}
+
+	searchPantry, uuid, err := c.store.SearchPantry(ctx)
+	if err != nil {
+		c.logger.Error("Cannot find corresponding UUID", zap.Error(err))
+	}
+
 	// Incomplete example! Do something with list of pantries instead of logging!
-	c.logger.Info("Found pantries", zap.Any("Pantries", list))
+	c.logger.Info("Found pantries BOY", zap.Any("Pantries", listPantry))
+	c.logger.Info("Found merchants", zap.Any("Merchants", listMerchant))
+	c.logger.Info("Found customers", zap.Any("Customers", listCustomer))
+	c.logger.Info("Found UUID", zap.Any("UUID", uuid))
+	c.logger.Info("Searched pantry", zap.Any("Search", searchPantry))
+
+	customResp := message.Message{
+		Code:    codes.Content,
+		Token:   r.Token,
+		Context: r.Context,
+		Options: make(message.Options, 0, 16),
+		Body:    bytes.NewReader([]byte(fmt.Sprintf("List of pantries %v", listPantry))),
+	}
+
+	optsBuf := make([]byte, 32)
+
+	opts, used, err := customResp.Options.SetContentFormat(optsBuf, message.TextPlain)
+	if err == message.ErrTooSmall {
+		optsBuf = append(optsBuf, make([]byte, used)...)
+		opts, _, err = customResp.Options.SetContentFormat(optsBuf, message.TextPlain)
+	}
+
+	if err != nil {
+		c.logger.Error("Cannot set options to response", zap.Error(err))
+		return
+	}
+
+	customResp.Options = opts
+	c.logger.Info("BODY: ", zap.Any("body: ", customResp.Body))
+	err = w.Client().WriteMessage(&customResp)
+	if err != nil {
+		c.logger.Error("Cannot set pantry response", zap.Error(err))
+	}
+
 }

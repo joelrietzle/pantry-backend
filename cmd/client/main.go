@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io/ioutil"
 	"os"
 	"time"
 
@@ -18,7 +19,7 @@ func main() {
 		logger.Fatal("Error dialing", zap.Error(err))
 	}
 
-	path := "/a"
+	path := "/"
 
 	if len(os.Args) > 1 {
 		path = os.Args[1]
@@ -32,5 +33,8 @@ func main() {
 		logger.Fatal("Error sending request", zap.Error(err))
 	}
 
-	logger.Info("Response payload", zap.String("response", resp.String()))
+	body, err := ioutil.ReadAll(resp.Body())
+
+	logger.Info("Response payload", zap.ByteString("response", body))
+	//logger.Info("Reponse body", zap.String("reponse", resp.Body()))
 }

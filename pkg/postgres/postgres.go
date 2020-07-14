@@ -6,17 +6,55 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
+type qrString string
+
 type Pantry struct {
 	QR   string
 	UUID string
+}
+
+type Merchant struct {
+	FirstName string
+	LastName  string
+	Email     string
+}
+
+type Customer struct {
+	FirstName string
+	LastName  string
+	Email     string
 }
 
 type PantryStore struct {
 	pool *pgxpool.Pool
 }
 
+type MerchantStore struct {
+	pool *pgxpool.Pool
+}
+
+type CustomerStore struct {
+	pool *pgxpool.Pool
+}
+
+type QrList struct {
+	pool *pgxpool.Pool
+	QR   string
+}
+
 func NewPantryStore(pool *pgxpool.Pool) *PantryStore {
 	return &PantryStore{
+		pool: pool,
+	}
+}
+func NewMerchantStore(pool *pgxpool.Pool) *MerchantStore {
+	return &MerchantStore{
+		pool: pool,
+	}
+}
+
+func NewCustomerStore(pool *pgxpool.Pool) *CustomerStore {
+	return &CustomerStore{
 		pool: pool,
 	}
 }
@@ -40,4 +78,73 @@ func (p *PantryStore) ListPantries(ctx context.Context) ([]Pantry, error) {
 	}
 
 	return pantries, nil
+}
+
+func (q *PantryStore) SearchPantry(ctx context.Context) ([]Pantry, []QrList, error) {
+	rows, err := q.pool.Query(ctx, "SELECT uuid FROM pantry WHERE qr = 'joe1';")
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+
+	uuids := []Pantry{}
+
+	for rows.Next() {
+		uuid := Pantry{}
+		if err := rows.Scan(&uuid.UUID); err != nil {
+			return nil, nil, err
+		}
+
+		uuids = append(uuids, uuid)
+
+	}
+
+	return uuids, nil, err
+}
+
+func (m *MerchantStore) ListMerchants(ctx context.Context) ([]Merchant, error) {
+	rows, err := m.pool.Query(ctx, "SELECT FirstName, LastName, Email FROM merchant")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	merchants := []Merchant{}
+
+	for rows.Next() {
+		merchant := Merchant{}
+		if err := rows.Scan(&merchant.FirstName, &merchant.LastName, &merchant.Email); err != nil {
+			return nil, err
+		}
+
+		merchants = append(merchants, merchant)
+	}
+
+	return merchants, nil
+}
+
+func (c *CustomerStore) ListCustomers(ctx context.Context) ([]Customer, error) {
+	rows, err := c.pool.Query(ctx, "SELECT FirstName, LastName, Email FROM customer")
+	if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+
+	customers := []Customer{}
+
+	for rows.Next() {
+		customer := Customer{}
+		if err := rows.Scan(&customer.FirstName, &customer.LastName, &customer.Email); err != nil {
+			return nil, err
+		}
+
+		customers = append(customers, customer)
+	}
+
+	return customers, nil
+}
+
+func getString(qr string) qrString {
+	return qrString(qr)
 }
