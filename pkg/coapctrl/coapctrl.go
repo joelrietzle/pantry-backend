@@ -10,17 +10,21 @@ import (
 	"github.com/go-ocf/go-coap/v2/message"
 	"github.com/go-ocf/go-coap/v2/message/codes"
 	"github.com/go-ocf/go-coap/v2/mux"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/joelrietzle/pantry/pkg/postgres"
 	"go.uber.org/zap"
 )
-
-var qr string
 
 type CoAPController struct {
 	logger   *zap.Logger
 	store    *postgres.PantryStore
 	merchant *postgres.MerchantStore
 	customer *postgres.CustomerStore
+}
+
+type QrList struct {
+	pool *pgxpool.Pool
+	QR   string
 }
 
 func NewController(logger *zap.Logger, store *postgres.PantryStore, merchant *postgres.MerchantStore, customer *postgres.CustomerStore) *CoAPController {
@@ -84,10 +88,8 @@ func (c *CoAPController) HandleC(w mux.ResponseWriter, r *mux.Message) {
 	path, err := r.Options.Path()
 	QR := strings.TrimPrefix(path, "unlock/")
 	c.logger.Info("Trimmed: ", zap.Any("Path", QR))
-	qrstring := postgres.getString(QR)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-
 	listPantry, err := c.store.ListPantries(ctx)
 	if err != nil {
 		c.logger.Error("Cannot list pantries", zap.Error(err))
@@ -103,7 +105,7 @@ func (c *CoAPController) HandleC(w mux.ResponseWriter, r *mux.Message) {
 		c.logger.Error("Cannot list merchants", zap.Error(err))
 	}
 
-	searchPantry, uuid, err := c.store.SearchPantry(ctx)
+	listDeviceID, err := c.store.ListDeviceByQR(ctx, QR)
 	if err != nil {
 		c.logger.Error("Cannot find corresponding UUID", zap.Error(err))
 	}
@@ -112,8 +114,7 @@ func (c *CoAPController) HandleC(w mux.ResponseWriter, r *mux.Message) {
 	c.logger.Info("Found pantries BOY", zap.Any("Pantries", listPantry))
 	c.logger.Info("Found merchants", zap.Any("Merchants", listMerchant))
 	c.logger.Info("Found customers", zap.Any("Customers", listCustomer))
-	c.logger.Info("Found UUID", zap.Any("UUID", uuid))
-	c.logger.Info("Searched pantry", zap.Any("Search", searchPantry))
+	c.logger.Info("Searched pantry", zap.Any("Search", listDeviceID))
 
 	customResp := message.Message{
 		Code:    codes.Content,

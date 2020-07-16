@@ -2,11 +2,10 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/jackc/pgx/v4/pgxpool"
 )
-
-type qrString string
 
 type Pantry struct {
 	QR   string
@@ -80,10 +79,11 @@ func (p *PantryStore) ListPantries(ctx context.Context) ([]Pantry, error) {
 	return pantries, nil
 }
 
-func (q *PantryStore) SearchPantry(ctx context.Context) ([]Pantry, []QrList, error) {
-	rows, err := q.pool.Query(ctx, "SELECT uuid FROM pantry WHERE qr = 'joe1';")
+func (q *PantryStore) ListDeviceByQR(ctx context.Context, qrString string) ([]Pantry, error) {
+	fmt.Println("QR SHUDOASHID:", qrString)
+	rows, err := q.pool.Query(ctx, "SELECT uuid FROM pantry WHERE qr = $1", qrString)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	defer rows.Close()
 
@@ -92,14 +92,14 @@ func (q *PantryStore) SearchPantry(ctx context.Context) ([]Pantry, []QrList, err
 	for rows.Next() {
 		uuid := Pantry{}
 		if err := rows.Scan(&uuid.UUID); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 
 		uuids = append(uuids, uuid)
 
 	}
 
-	return uuids, nil, err
+	return uuids, err
 }
 
 func (m *MerchantStore) ListMerchants(ctx context.Context) ([]Merchant, error) {
@@ -123,8 +123,8 @@ func (m *MerchantStore) ListMerchants(ctx context.Context) ([]Merchant, error) {
 	return merchants, nil
 }
 
-func (c *CustomerStore) ListCustomers(ctx context.Context) ([]Customer, error) {
-	rows, err := c.pool.Query(ctx, "SELECT FirstName, LastName, Email FROM customer")
+func (c *CustomerStore) ListCustomers(ctx context.Context, firstName string, lastName string, email string) ([]Customer, error) {
+	rows, err := c.pool.Query(ctx, "SELECT FirstName, LastName, Email FROM customer WHERE FirstName = $1 OR LastName = $2 OR Email = $3", firstName, lastName, email)
 	if err != nil {
 		return nil, err
 	}
@@ -143,8 +143,4 @@ func (c *CustomerStore) ListCustomers(ctx context.Context) ([]Customer, error) {
 	}
 
 	return customers, nil
-}
-
-func getString(qr string) qrString {
-	return qrString(qr)
 }
