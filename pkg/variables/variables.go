@@ -1,6 +1,8 @@
 package variables
 
-var qr string
-var firstName string
-var lastName string
-var email string
+type Variables struct {
+	qr        string
+	firstName string
+	lastName  string
+	email     string
+}

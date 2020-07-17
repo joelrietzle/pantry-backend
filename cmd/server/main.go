@@ -13,7 +13,17 @@ import (
 	"go.uber.org/zap"
 )
 
+type Variables struct {
+	qr        string
+	uuid      string
+	firstName string
+	lastName  string
+	email     string
+}
+
 func main() {
+
+	var Variable Variables
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
 
@@ -29,27 +39,27 @@ func main() {
 	store := postgres.NewPantryStore(pool)
 	merchant := postgres.NewMerchantStore(pool)
 	customer := postgres.NewCustomerStore(pool)
-	qrstring := postgres.NewQrString(QR)
 
-	pantries, _ := store.ListPantries(context.Background())
-	merchants, _ := merchant.ListMerchants(context.Background())
-	customers, _ := customer.ListCustomers(context.Background())
-	uuid, search, _ := store.SearchPantry(context.Background())
-	qrstring, _ := qrstring.GetString(context.Background())
-	logger.Info("Test", zap.Any("Testing", pantries))
-	logger.Info("Test", zap.Any("Testing", merchants))
-	logger.Info("Test", zap.Any("Testing", customers))
+	firstnameMerchant, lastnameMerchant, emailMerchant, _ := merchant.ListMerchants(context.Background(), Variable.firstName, Variable.lastName, Variable.email)
+	firstnameCustomer, lastnameCustomer, emailCustomer, _ := customer.ListCustomers(context.Background(), Variable.firstName, Variable.lastName, Variable.email)
+	qr, uuid, _ := store.ListDevice(context.Background(), Variable.qr, Variable.uuid)
+
+	logger.Info("Test", zap.Any("firstnameMerchant", firstnameMerchant), zap.Any("lastnameMerchant: ", lastnameMerchant), zap.Any("emailMerchant: ", emailMerchant))
+	logger.Info("Test", zap.Any("firstnameCustomer", firstnameCustomer), zap.Any("lastnameCustomer: ", lastnameCustomer), zap.Any("emailCustomer: ", emailCustomer))
+	logger.Info("Test", zap.Any("Testing", qr))
 	logger.Info("Test", zap.Any("Testing", uuid))
-	logger.Info("Tets", zap.Any("Testing", search))
 
-	coapsvc := coapctrl.NewController(logger, store, merchant, customer, qrstring)
+	coapsvc := coapctrl.NewController(logger, store, merchant, customer)
 
 	r := mux.NewRouter()
 	r.Use(coapsvc.Logger)
-	r.Handle("/a", mux.HandlerFunc(coapsvc.HandleA))
-	r.Handle("/b", mux.HandlerFunc(coapsvc.HandleB))
-	r.HandleFunc("/unlock/", mux.HandlerFunc(coapsvc.HandleC))
-	//r.Handle("/unlock", mux.HandlerFunc(coapsvc.HandleC))
+	r.HandleFunc("/pantry/", mux.HandlerFunc(coapsvc.HandlePantry))
+	r.HandleFunc("/customer/", mux.HandlerFunc(coapsvc.HandleCustomer))
+	r.HandleFunc("/merchant/", mux.HandlerFunc(coapsvc.HandleMerchant))
+	r.HandleFunc("/unlock/", mux.HandlerFunc(coapsvc.HandleQRUnlock))
+	r.HandleFunc("/lock/", mux.HandlerFunc(coapsvc.HandleQRLock))
+	r.HandleFunc("/unlock/", mux.HandlerFunc(coapsvc.HandleUUIDUnlock))
+	r.HandleFunc("/lock/", mux.HandlerFunc(coapsvc.HandleUUIDLock))
 
 	logger.Fatal("Failed to start CoAP server", zap.Error(coap.ListenAndServe("udp", ":5688", r)))
 }
